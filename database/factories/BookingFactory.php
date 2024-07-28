@@ -20,6 +20,7 @@ class BookingFactory extends Factory
             'customer_name' => $this->faker->name,
             'customer_email' => $this->faker->email,
             'number_of_people' => $this->faker->numberBetween(1, 10),
+            'status' => $this->faker->numberBetween(1, 3),
             'booking_date' => $this->faker->date(),
         ];
     }

@@ -2,70 +2,77 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Tour\ListRequest;
+use App\Http\Requests\Tour\StoreRequest;
+use App\Http\Requests\Tour\UpdateRequest;
+use App\Http\Resources\Tour\TourCollection;
+use App\Http\Resources\Tour\TourResource;
 use App\Models\Tour;
-use Illuminate\Http\Request;
+use App\Services\TourService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class TourController extends Controller
 {
-    public function index(Request $request)
+    public function index( ListRequest $request ) : TourCollection
     {
-        $query = Tour::query();
+        $tours = TourService::paginate( $request->validated() );
+        return new TourCollection( $tours );
+    
+        return response()->json( $tours, 200 );
+    }
 
-        if ($request->has('min_price')) {
-            $query->where('price', '>=', $request->min_price);
+    public function store(StoreRequest $request): \Illuminate\Http\JsonResponse
+    {
+        $tour = TourService::create( $request->validated() );
+        return response()->json( [
+            'data' => TourResource::make( $tour ),
+        ], 201 );
+    }
+
+    public function show( $tourId ) : \Illuminate\Http\JsonResponse
+    {
+        $tour = Tour::find( $tourId );
+        return $tour ?
+
+        response()->json( [
+            'data' => TourResource::make( $tour ),
+        ] ):
+
+        response()->json( [
+            'error' => 'Tour not found',
+        ], 404 );
+    }
+
+    public function update( UpdateRequest $request, $tourId ) : \Illuminate\Http\JsonResponse
+    {
+
+        try {
+            $tour = TourService::update($request->validated(), $tourId);
+            return response()->json([
+                'data' => TourResource::make($tour),
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'error' => 'Tour not found',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred while updating the tour.',
+            ], 500);
         }
-
-        if ($request->has('max_price')) {
-            $query->where('price', '<=', $request->max_price);
-        }
-
-        if ($request->has('start_date')) {
-            $query->where('start_date', '>=', $request->start_date);
-        }
-
-        if ($request->has('end_date')) {
-            $query->where('end_date', '<=', $request->end_date);
-        }
-
-        return response()->json($query->get(), 200);
+        
     }
-
-    public function store(Request $request)
+    
+    public function destroy( $tourId ) : \Illuminate\Http\JsonResponse
     {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'price' => 'required|numeric',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
-        ]);
+        $tour = TourService::delete( $tourId );
+        return $tour ?
 
-        $tour = Tour::create($validatedData);
-        return response()->json($tour, 201);
+        response()->json( null, 204 ):
+
+        response()->json( [
+            'error' => 'Tour not found',
+        ], 404 );
     }
-
-    public function show(Tour $tour)
-    {
-        return response()->json($tour, 200);
-    }
-
-    public function update(Request $request, Tour $tour)
-    {
-        $validatedData = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'description' => 'sometimes|string',
-            'price' => 'sometimes|numeric',
-            'start_date' => 'sometimes|date',
-            'end_date' => 'sometimes|date|after_or_equal:start_date',
-        ]);
-
-        $tour->update($validatedData);
-        return response()->json($tour, 200);
-    }
-
-    public function destroy(Tour $tour)
-    {
-        $tour->delete();
-        return response()->json(null, 204);
-    }
+    
 }

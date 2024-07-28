@@ -2,71 +2,111 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Booking\ListRequest;
+use App\Http\Requests\Booking\StoreRequest;
+use App\Http\Requests\Booking\UpdateRequest;
+use App\Http\Resources\Booking\BookingCollection;
+use App\Http\Resources\Booking\BookingResource;
 use App\Models\Booking;
-use Illuminate\Http\Request;
+use App\Services\BookingService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class BookingController extends Controller
 {
-    public function index(Request $request)
+    public function index( ListRequest $request ) : BookingCollection
     {
-        $query = Booking::query();
+        $bookings = BookingService::paginate( $request->validated() );
+        return new BookingCollection( $bookings );
+    
+        return response()->json( $bookings, 200 );
+    }
 
-        if ($request->has('start_date')) {
-            $query->where('booking_date', '>=', $request->start_date);
+    public function store( StoreRequest $request ): \Illuminate\Http\JsonResponse
+    {
+        try {
+            $booking = BookingService::create($request->validated());
+            return response()->json([
+                'data' => BookingResource::make($booking),
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred while creating the booking: ' . $e->getMessage(),
+            ], 500);
         }
+    }
 
-        if ($request->has('end_date')) {
-            $query->where('booking_date', '<=', $request->end_date);
+    public function show( $bookingId ) : \Illuminate\Http\JsonResponse
+    {
+        $booking = Booking::find( $bookingId );
+        return $booking ?
+
+        response()->json( [
+            'data' => BookingResource::make( $booking ),
+        ] ):
+
+        response()->json( [
+            'error' => 'Booking not found',
+        ], 404 );
+    }
+
+    public function update(UpdateRequest $request, $bookingId) : \Illuminate\Http\JsonResponse
+    {
+        try {
+            $booking = BookingService::update($request->validated(), $bookingId);
+            return response()->json([
+                'data' => BookingResource::make($booking),
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'error' => 'Booking not found',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred while updating the booking.',
+            ], 500);
         }
+    }
 
-        $bookings = $query->get();
+    public function destroy( $bookingId ) : \Illuminate\Http\JsonResponse
+    {
+        $booking = BookingService::delete( $bookingId );
+        return $booking ?
 
-        foreach ($bookings as $booking) {
-            $booking->tour;
-            $booking->hotel;
+        response()->json( null, 204 ):
+
+        response()->json( [
+            'error' => 'Booking not found',
+        ], 404 );
+    }
+
+    public function export() 
+    {
+        return BookingService::exportBookings();
+    }
+
+    public function cancel($bookingId)
+    {
+        try {
+            $booking = BookingService::cancel($bookingId);
+    
+            if ($booking) {
+                return response()->json([
+                    'data' => BookingResource::make($booking),
+                ], 200);
+            } else {
+                return response()->json([
+                    'error' => 'Booking not found',
+                ], 404);
+            }
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+            ], 500);
         }
-
-        return response()->json($bookings, 200);
     }
-
-    public function store(Request $request)
-    {
-        $validatedData = $request->validate([
-            'tour_id' => 'required|exists:tours,id',
-            'hotel_id' => 'required|exists:hotels,id',
-            'customer_name' => 'required|string|max:255',
-            'customer_email' => 'required|email|max:255',
-            'number_of_people' => 'required|integer|min:1',
-            'booking_date' => 'required|date',
-        ]);
-
-        $booking = Booking::create($validatedData);
-        return response()->json($booking, 201);
-    }
-
-    public function show(Booking $booking)
-    {
-        return response()->json($booking, 200);
-    }
-
-    public function update(Request $request, Booking $booking)
-    {
-        $validatedData = $request->validate([
-            'tour_id' => 'sometimes|exists:tours,id',
-            'hotel_id' => 'sometimes|exists:hotels,id',
-            'customer_name' => 'sometimes|string|max:255',
-            'customer_email' => 'sometimes|email|max:255',
-            'number_of_people' => 'sometimes|integer|min:1',
-            'booking_date' => 'sometimes|date',
-        ]);
-
-        $booking->update($validatedData);
-        return response()->json($booking, 200);
-    }
-
-    public function destroy(Booking $booking)
-    {
-        $booking->delete();
-        return response()->json(null, 204);
-    }
+    
 }
